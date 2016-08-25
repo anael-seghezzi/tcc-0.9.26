@@ -1162,12 +1162,7 @@ struct TCCIO
     int (*close)(int fh);
 };
 
-struct TCCIO tcc_io = {
-    open,
-    read,
-    lseek,
-    close
-};
+struct TCCIO tcc_io;
 
 /* ------------ libtcc.c ------------ */
 

@@ -1080,6 +1080,11 @@ LIBTCCAPI TCCState *tcc_new(void)
 
     tcc_cleanup();
 
+    tcc_io.open = open;
+    tcc_io.read = read;
+    tcc_io.lseek = lseek;
+    tcc_io.close = close;
+
     s = tcc_mallocz(sizeof(TCCState));
     if (!s)
         return NULL;
