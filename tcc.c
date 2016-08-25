@@ -24,9 +24,59 @@
 #include "tcc.h"
 #endif
 
+static void print_paths(const char *msg, char **paths, int nb_paths)
+{
+    int i;
+    printf("%s:\n%s", msg, nb_paths ? "" : "  -\n");
+    for(i = 0; i < nb_paths; i++)
+        printf("  %s\n", paths[i]);
+}
+
+static void display_info(TCCState *s, int what)
+{
+    switch (what) {
+    case 0:
+        printf("tcc version %s ("
+#ifdef TCC_TARGET_I386
+        "i386"
+#elif defined TCC_TARGET_X86_64
+        "x86-64"
+#elif defined TCC_TARGET_C67
+        "C67"
+#elif defined TCC_TARGET_ARM
+        "ARM"
+# ifdef TCC_ARM_HARDFLOAT
+        " Hard Float"
+# endif
+#elif defined TCC_TARGET_ARM64
+        "AArch64"
+# ifdef TCC_ARM_HARDFLOAT
+        " Hard Float"
+# endif
+#endif
+#ifdef TCC_TARGET_PE
+        " Windows"
+#else
+        " Linux"
+#endif
+        ")\n", TCC_VERSION);
+        break;
+    case 1:
+        printf("install: %s\n", s->tcc_lib_path);
+        /* print_paths("programs", NULL, 0); */
+        print_paths("include", s->sysinclude_paths, s->nb_sysinclude_paths);
+        print_paths("libraries", s->library_paths, s->nb_library_paths);
+#ifndef TCC_TARGET_PE
+        print_paths("crt", s->crt_paths, s->nb_crt_paths);
+        printf("elfinterp:\n  %s\n",  DEFAULT_ELFINTERP(s));
+#endif
+        break;
+    }
+}
+
 static void help(void)
 {
-    printf("tcc version " TCC_VERSION " - Tiny C Compiler - Copyright (C) 2001-2006 Fabrice Bellard\n"
+    printf("Tiny C Compiler "TCC_VERSION" - Copyright (C) 2001-2006 Fabrice Bellard\n"
            "Usage: tcc [options...] [-o outfile] [-c] infile(s)...\n"
            "       tcc [options...] -run infile [arguments...]\n"
            "General options:\n"
@@ -40,11 +90,16 @@ static void help(void)
            "  -vv         show included files (as sole argument: show search paths)\n"
            "  -dumpversion\n"
            "  -bench      show compilation statistics\n"
+           "  -xc -xa     specify type of the next infile\n"
+           "  -           use stdin pipe as infile\n"
+           "  @listfile   read line separated arguments from 'listfile'\n"
            "Preprocessor options:\n"
-           "  -E          preprocess only\n"
            "  -Idir       add include path 'dir'\n"
            "  -Dsym[=val] define 'sym' with value 'val'\n"
            "  -Usym       undefine 'sym'\n"
+           "  -E          preprocess only\n"
+           "  -P[1]       no / alternative #line output with -E\n"
+           "  -dD -dM     output #define directives with -E\n"
            "Linker options:\n"
            "  -Ldir       add library path 'dir'\n"
            "  -llib       link with dynamic or static library 'lib'\n"
@@ -78,7 +133,7 @@ static void help(void)
 #include <process.h>
 static int execvp_win32(const char *prog, char **argv)
 {
-    int ret = spawnvp(P_NOWAIT, prog, (char const*const*)argv);
+    int ret = _spawnvp(P_NOWAIT, prog, (const char *const*)argv);
     if (-1 == ret)
         return ret;
     cwait(&ret, ret, WAIT_CHILD);
@@ -178,62 +233,13 @@ static char *default_outputfile(TCCState *s, const char *first_file)
     return tcc_strdup(buf);
 }
 
-static void print_paths(const char *msg, char **paths, int nb_paths)
-{
-    int i;
-    printf("%s:\n%s", msg, nb_paths ? "" : "  -\n");
-    for(i = 0; i < nb_paths; i++)
-        printf("  %s\n", paths[i]);
-}
-
-static void display_info(TCCState *s, int what)
-{
-    switch (what) {
-    case 0:
-        printf("tcc version %s ("
-#ifdef TCC_TARGET_I386
-        "i386"
-# ifdef TCC_TARGET_PE
-        " Win32"
-# endif
-#elif defined TCC_TARGET_X86_64
-        "x86-64"
-# ifdef TCC_TARGET_PE
-        " Win64"
-# endif
-#elif defined TCC_TARGET_ARM
-        "ARM"
-# ifdef TCC_ARM_HARDFLOAT
-        " Hard Float"
-# endif
-# ifdef TCC_TARGET_PE
-        " WinCE"
-# endif
-#endif
-#ifndef TCC_TARGET_PE
-# ifdef __linux
-        " Linux"
-# endif
-#endif
-        ")\n", TCC_VERSION);
-        break;
-    case 1:
-        printf("install: %s/\n", s->tcc_lib_path);
-        /* print_paths("programs", NULL, 0); */
-        print_paths("crt", s->crt_paths, s->nb_crt_paths);
-        print_paths("libraries", s->library_paths, s->nb_library_paths);
-        print_paths("include", s->sysinclude_paths, s->nb_sysinclude_paths);
-        printf("elfinterp:\n  %s\n",  CONFIG_TCC_ELFINTERP);
-        break;
-    }
-}
-
 static int64_t getclock_us(void)
 {
 #ifdef _WIN32
-    struct _timeb tb;
-    _ftime(&tb);
-    return (tb.time * 1000LL + tb.millitm) * 1000LL;
+    LARGE_INTEGER frequency, t1;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&t1);
+    return t1.QuadPart * 1000000LL / frequency.QuadPart;
 #else
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -241,17 +247,27 @@ static int64_t getclock_us(void)
 #endif
 }
 
+static void set_whole_archive(TCCState* s, int on)
+{
+    s->whole_archive = on;
+    if (1 == s->verbose)
+        printf("%cwhole-archive>\n", s->whole_archive? '+' : '-');
+}
+
 int main(int argc, char **argv)
 {
     TCCState *s;
-    int ret, optind, i, bench;
+    int ret, optind, i;
     int64_t start_time = 0;
-    const char *first_file = NULL;
 
     s = tcc_new();
-    s->output_type = TCC_OUTPUT_EXE;
 
     optind = tcc_parse_args(s, argc - 1, argv + 1);
+
+    if (s->do_bench)
+        start_time = getclock_us();
+
+    tcc_set_environment(s);
 
     if (optind == 0) {
         help();
@@ -281,50 +297,60 @@ int main(int argc, char **argv)
         if (s->nb_libraries != 0)
             tcc_error("cannot specify libraries with -c");
         /* accepts only a single input file */
-        if (s->nb_files != 1)
-            tcc_error("cannot specify multiple files with -c");
-    }
-    
-    if (s->output_type == TCC_OUTPUT_PREPROCESS) {
-        if (!s->outfile) {
-            s->ppfp = stdout;
-        } else {
-            s->ppfp = fopen(s->outfile, "w");
-            if (!s->ppfp)
-                tcc_error("could not write '%s'", s->outfile);
+        if ((s->nb_files != 1) && s->outfile) {
+            tcc_error("cannot specify multiple files with -c and -o");
         }
     }
-
-    bench = s->do_bench;
-    if (bench)
-        start_time = getclock_us();
 
     tcc_set_output_type(s, s->output_type);
 
     /* compile or add each files or library */
     for(i = ret = 0; i < s->nb_files && ret == 0; i++) {
-        const char *filename;
-
-        filename = s->files[i];
+        int filetype = *(unsigned char *)s->files[i];
+        const char *filename = s->files[i] + 1;
+        if (filetype == TCC_FILETYPE_AR_WHOLE_ON ||
+            filetype == TCC_FILETYPE_AR_WHOLE_OFF)
+        {
+            set_whole_archive(s, filetype == TCC_FILETYPE_AR_WHOLE_ON);
+            continue;
+        }
+        if (1 == s->verbose)
+            printf("-> %s\n", filename);
         if (filename[0] == '-' && filename[1] == 'l') {
             if (tcc_add_library(s, filename + 2) < 0) {
-                tcc_error_noabort("cannot find '%s'", filename);
-                ret = 1;
+                /* don't fail on -lm as it's harmless to skip math lib */
+                if (strcmp(filename + 2, "m")) {
+                    tcc_error_noabort("cannot find library 'lib%s'", filename + 2);
+                    ret = 1;
+                }
             }
         } else {
-            if (1 == s->verbose)
-                printf("-> %s\n", filename);
-            if (tcc_add_file(s, filename) < 0)
+            if (!s->outfile)
+                s->outfile = default_outputfile(s, filename);
+            if (tcc_add_file(s, filename, filetype) < 0)
                 ret = 1;
-            if (!first_file)
-                first_file = filename;
+            else
+            if (s->output_type == TCC_OUTPUT_OBJ) {
+                ret = !!tcc_output_file(s, s->outfile);
+                if (s->gen_deps && !ret)
+                    gen_makedeps(s, s->outfile, s->deps_outfile);
+                if (!ret) {
+                    if ((i+1) < s->nb_files) {
+                        tcc_delete(s);
+                        s = tcc_new();
+                        tcc_parse_args(s, argc - 1, argv + 1);
+                        tcc_set_environment(s);
+                        if (s->output_type != TCC_OUTPUT_OBJ)
+                            tcc_error("internal error");
+                        tcc_set_output_type(s, s->output_type);
+                    }
+                }
+            }
         }
     }
+    set_whole_archive(s, 0);
 
     if (0 == ret) {
-        if (bench)
-            tcc_print_stats(s, getclock_us() - start_time);
-
         if (s->output_type == TCC_OUTPUT_MEMORY) {
 #ifdef TCC_IS_NATIVE
             ret = tcc_run(s, argc - 1 - optind, argv + 1 + optind);
@@ -332,21 +358,19 @@ int main(int argc, char **argv)
             tcc_error_noabort("-run is not available in a cross compiler");
             ret = 1;
 #endif
-        } else if (s->output_type == TCC_OUTPUT_PREPROCESS) {
-             if (s->outfile)
-                fclose(s->ppfp);
-        } else {
-            if (!s->outfile)
-                s->outfile = default_outputfile(s, first_file);
+        } else
+        if (s->output_type == TCC_OUTPUT_EXE ||
+            s->output_type == TCC_OUTPUT_DLL)
+        {
             ret = !!tcc_output_file(s, s->outfile);
-            /* dump collected dependencies */
             if (s->gen_deps && !ret)
                 gen_makedeps(s, s->outfile, s->deps_outfile);
         }
     }
 
+    if (s->do_bench)
+        tcc_print_stats(s, getclock_us() - start_time);
+
     tcc_delete(s);
-    if (bench)
-        tcc_memstats();
     return ret;
 }

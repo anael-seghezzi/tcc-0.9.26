@@ -20,9 +20,27 @@ typedef unsigned int uint32_t;
 typedef unsigned long long int uint64_t;
 #endif
 
+#ifndef NULL
 #define NULL ((void*)0)
+#endif
+
 #define offsetof(type, field) ((size_t)&((type *)0)->field)
 
 void *alloca(size_t size);
 
+#endif
+
+/* Older glibc require a wint_t from <stddef.h> (when requested
+   by __need_wint_t, as otherwise stddef.h isn't allowed to
+   define this type).   Note that this must be outside the normal
+   _STDDEF_H guard, so that it works even when we've included the file
+   already (without requiring wint_t).  Some other libs define _WINT_T
+   if they've already provided that type, so we can use that as guard.
+   TCC defines __WINT_TYPE__ for us.  */
+#if defined (__need_wint_t)
+#ifndef _WINT_T
+#define _WINT_T
+typedef __WINT_TYPE__ wint_t;
+#endif
+#undef __need_wint_t
 #endif

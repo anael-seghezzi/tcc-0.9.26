@@ -9,6 +9,14 @@
 void __set_app_type(int);
 void _controlfp(unsigned a, unsigned b);
 
+#ifndef __TRY__
+    #ifdef _WIN64
+	#define __TRY__
+    #else
+	#define __TRY__ void __try__(void**), *_sehrec[6]; __try__(_sehrec);
+    #endif
+#endif
+
 int _winstart(void)
 {
     __TRY__
@@ -59,6 +67,6 @@ int _runwinmain(int argc, char **argv)
         szCmd = "";
     else if (szCmd > p && szCmd[-1] == '\"')
         --szCmd;
+    _controlfp(0x10000, 0x30000);
     return WinMain(GetModuleHandle(NULL), NULL, szCmd, SW_SHOWDEFAULT);
 }
-

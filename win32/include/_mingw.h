@@ -58,6 +58,10 @@
 #define __CRT_UNALIGNED
 #define _CONST_RETURN
 
+#ifndef _TRUNCATE
+#define _TRUNCATE ((size_t)-1)
+#endif
+
 #define __CRT_STRINGIZE(_Value) #_Value
 #define _CRT_STRINGIZE(_Value) __CRT_STRINGIZE(_Value)
 #define __CRT_WIDE(_String) L ## _String
@@ -100,16 +104,19 @@ typedef __time64_t time_t;
 #define _TIME_T_DEFINED
 #endif
 
+#if 0 // defined in stddef.h
 typedef unsigned long size_t;
-#define _SIZE_T_DEFINED
 typedef long ssize_t;
-#define _SSIZE_T_DEFINED
-
-typedef unsigned int wint_t;
-typedef unsigned short wctype_t;
-#define _WCTYPE_T_DEFINED
 typedef unsigned short wchar_t;
+#endif
+#define _SIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
 #define _WCHAR_T_DEFINED
+
+typedef unsigned short wctype_t;
+typedef unsigned int wint_t;
+#define _WCTYPE_T_DEFINED
+#define _WINT_T
 
 typedef int errno_t;
 #define _ERRCODE_DEFINED
@@ -126,14 +133,15 @@ typedef struct localeinfo_struct _locale_tstruct,*_locale_t;
 #define NOSERVICE 1
 #define NOMCX 1
 #define NOIME 1
-#ifndef WIN32_LEAN_AND_MEAN
-# define WIN32_LEAN_AND_MEAN 1
-#endif
 #ifndef WINVER
 # define WINVER 0x0502
 #endif
 #ifndef _WIN32_WINNT
 # define _WIN32_WINNT 0x502
 #endif
+
+#define __C89_NAMELESS
+#define __MINGW_EXTENSION
+#define WINAPI_FAMILY_PARTITION(X) 1
 
 #endif /* __MINGW_H */

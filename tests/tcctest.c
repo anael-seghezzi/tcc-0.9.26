@@ -1,7 +1,7 @@
 /*
  * TCC auto test program
  */
-#include "../config.h"
+#include "config.h"
 
 #if GCC_MAJOR >= 3
 
@@ -14,6 +14,23 @@
 /* gcc 2.95.3 does not handle correctly CR in strings or after strays */
 #define CORRECT_CR_HANDLING
 
+#endif
+
+#if defined(_WIN32)
+#define LONG_LONG_FORMAT "%lld"
+#define ULONG_LONG_FORMAT "%llu"
+#else
+#define LONG_LONG_FORMAT "%Ld"
+#define ULONG_LONG_FORMAT "%Lu"
+#endif
+
+// MinGW has 80-bit rather than 64-bit long double which isn't compatible with TCC or MSVC
+#if defined(_WIN32) && defined(__GNUC__)
+#define LONG_DOUBLE double
+#define LONG_DOUBLE_LITERAL(x) x
+#else
+#define LONG_DOUBLE long double
+#define LONG_DOUBLE_LITERAL(x) x ## L
 #endif
 
 /* deprecated and no longer supported in gcc 3.3 */
@@ -42,6 +59,7 @@
 
 #include "tcclib.h"
 
+void intdiv_test();
 void string_test();
 void expr_test();
 void macro_test();
@@ -96,6 +114,13 @@ void num(int n);
 void forward_ref(void);
 int isid(int c);
 
+/* Line joining happens before tokenization, so the following
+   must be parsed as ellipsis.  */
+void funny_line_continuation (int, ..\
+. );
+
+char via_volatile (char);
+
 #define A 2
 #define N 1234 + A
 #define pf printf
@@ -149,6 +174,71 @@ int qq(int x)
 #define spin_lock(lock) do { } while (0)
 #define wq_spin_lock spin_lock
 #define TEST2() wq_spin_lock(a)
+
+#define UINT_MAX ((unsigned) -1)
+
+void intdiv_test(void)
+{
+    printf("18/21=%u\n", 18/21);
+    printf("18%%21=%u\n", 18%21);
+    printf("41/21=%u\n", 41/21);
+    printf("41%%21=%u\n", 41%21);
+    printf("42/21=%u\n", 42/21);
+    printf("42%%21=%u\n", 42%21);
+    printf("43/21=%u\n", 43/21);
+    printf("43%%21=%u\n", 43%21);
+    printf("126/21=%u\n", 126/21);
+    printf("126%%21=%u\n", 126%21);
+    printf("131/21=%u\n", 131/21);
+    printf("131%%21=%u\n", 131%21);
+    printf("(UINT_MAX/2+3)/2=%u\n", (UINT_MAX/2+3)/2);
+    printf("(UINT_MAX/2+3)%%2=%u\n", (UINT_MAX/2+3)%2);
+
+    printf("18/-21=%u\n", 18/-21);
+    printf("18%%-21=%u\n", 18%-21);
+    printf("41/-21=%u\n", 41/-21);
+    printf("41%%-21=%u\n", 41%-21);
+    printf("42/-21=%u\n", 42/-21);
+    printf("42%%-21=%u\n", 42%-21);
+    printf("43/-21=%u\n", 43/-21);
+    printf("43%%-21=%u\n", 43%-21);
+    printf("126/-21=%u\n", 126/-21);
+    printf("126%%-21=%u\n", 126%-21);
+    printf("131/-21=%u\n", 131/-21);
+    printf("131%%-21=%u\n", 131%-21);
+    printf("(UINT_MAX/2+3)/-2=%u\n", (UINT_MAX/2+3)/-2);
+    printf("(UINT_MAX/2+3)%%-2=%u\n", (UINT_MAX/2+3)%-2);
+
+    printf("-18/21=%u\n", -18/21);
+    printf("-18%%21=%u\n", -18%21);
+    printf("-41/21=%u\n", -41/21);
+    printf("-41%%21=%u\n", -41%21);
+    printf("-42/21=%u\n", -42/21);
+    printf("-42%%21=%u\n", -42%21);
+    printf("-43/21=%u\n", -43/21);
+    printf("-43%%21=%u\n", -43%21);
+    printf("-126/21=%u\n", -126/21);
+    printf("-126%%21=%u\n", -126%21);
+    printf("-131/21=%u\n", -131/21);
+    printf("-131%%21=%u\n", -131%21);
+    printf("-(UINT_MAX/2+3)/2=%u\n", (0-(UINT_MAX/2+3))/2);
+    printf("-(UINT_MAX/2+3)%%2=%u\n", (0-(UINT_MAX/2+3))%2);
+
+    printf("-18/-21=%u\n", -18/-21);
+    printf("-18%%-21=%u\n", -18%-21);
+    printf("-41/-21=%u\n", -41/-21);
+    printf("-41%%-21=%u\n", -41%-21);
+    printf("-42/-21=%u\n", -42/-21);
+    printf("-42%%-21=%u\n", -42%-21);
+    printf("-43/-21=%u\n", -43/-21);
+    printf("-43%%-21=%u\n", -43%-21);
+    printf("-126/-21=%u\n", -126/-21);
+    printf("-126%%-21=%u\n", -126%-21);
+    printf("-131/-21=%u\n", -131/-21);
+    printf("-131%%-21=%u\n", -131%-21);
+    printf("-(UINT_MAX/2+3)/-2=%u\n", (0-(UINT_MAX/2+3))/-2);
+    printf("-(UINT_MAX/2+3)%%-2=%u\n", (0-(UINT_MAX/2+3))%-2);
+}
 
 void macro_test(void)
 {
@@ -233,6 +323,7 @@ void macro_test(void)
 
     printf("__LINE__=%d __FILE__=%s\n",
            __LINE__, __FILE__);
+#if 0
 #line 200
     printf("__LINE__=%d __FILE__=%s\n",
            __LINE__, __FILE__);
@@ -240,6 +331,7 @@ void macro_test(void)
     printf("__LINE__=%d __FILE__=%s\n",
            __LINE__, __FILE__);
 #line 227 "tcctest.c"
+#endif
 
     /* not strictly preprocessor, but we test it there */
 #ifdef C99_MACROS
@@ -254,7 +346,7 @@ void macro_test(void)
     printf("func='%s'\n", __FUNCTION__);
 
     /* complicated macros in glibc */
-    printf("INT64_MIN=%Ld\n", INT64_MIN);
+    printf("INT64_MIN=" LONG_LONG_FORMAT "\n", INT64_MIN);
     {
         int a;
         a = 1;
@@ -602,6 +694,9 @@ int main(int argc, char **argv)
     math_cmp_test();
     callsave_test();
     builtin_frame_address_test();
+    intdiv_test();
+    if (via_volatile (42) != 42)
+      printf ("via_volatile broken\n");
     return 0; 
 }
 
@@ -1547,10 +1642,16 @@ void bitfield_test(void)
 
 /* declare strto* functions as they are C99 */
 double strtod(const char *nptr, char **endptr);
-float strtof(const char *nptr, char **endptr);
-long double strtold(const char *nptr, char **endptr);
 
-#define FTEST(prefix, type, fmt)\
+#if defined(_WIN32)
+float strtof(const char *nptr, char **endptr) {return (float)strtod(nptr, endptr);}
+LONG_DOUBLE strtold(const char *nptr, char **endptr) {return (LONG_DOUBLE)strtod(nptr, endptr);}
+#else
+float strtof(const char *nptr, char **endptr);
+LONG_DOUBLE strtold(const char *nptr, char **endptr);
+#endif
+
+#define FTEST(prefix, typename, type, fmt)\
 void prefix ## cmp(type a, type b)\
 {\
     printf("%d %d %d %d %d %d\n",\
@@ -1578,28 +1679,39 @@ void prefix ## fcast(type a)\
 {\
     float fa;\
     double da;\
-    long double la;\
+    LONG_DOUBLE la;\
     int ia;\
+    long long llia;\
     unsigned int ua;\
+    unsigned long long llua;\
     type b;\
     fa = a;\
     da = a;\
     la = a;\
     printf("ftof: %f %f %Lf\n", fa, da, la);\
     ia = (int)a;\
+    llia = (long long)a;\
+    a = (a >= 0) ? a : -a;\
     ua = (unsigned int)a;\
-    printf("ftoi: %d %u\n", ia, ua);\
+    llua = (unsigned long long)a;\
+    printf("ftoi: %d %u %lld %llu\n", ia, ua, llia, llua);\
     ia = -1234;\
     ua = 0x81234500;\
+    llia = -0x123456789012345LL;\
+    llua = 0xf123456789012345LLU;\
     b = ia;\
     printf("itof: " fmt "\n", b);\
     b = ua;\
     printf("utof: " fmt "\n", b);\
+    b = llia;\
+    printf("lltof: " fmt "\n", b);\
+    b = llua;\
+    printf("ulltof: " fmt "\n", b);\
 }\
 \
 float prefix ## retf(type a) { return a; }\
 double prefix ## retd(type a) { return a; }\
-long double prefix ## retld(type a) { return a; }\
+LONG_DOUBLE prefix ## retld(type a) { return a; }\
 \
 void prefix ## call(void)\
 {\
@@ -1609,26 +1721,57 @@ void prefix ## call(void)\
     printf("strto%s: %f\n", #prefix, (double)strto ## prefix("1.2", NULL));\
 }\
 \
+void prefix ## signed_zeros(void) \
+{\
+  type x = 0.0, y = -0.0, n, p;\
+  if (x == y)\
+    printf ("Test 1.0 / x != 1.0 / y  returns %d (should be 1).\n",\
+            1.0 / x != 1.0 / y);\
+  else\
+    printf ("x != y; this is wrong!\n");\
+\
+  n = -x;\
+  if (x == n)\
+    printf ("Test 1.0 / x != 1.0 / -x returns %d (should be 1).\n",\
+            1.0 / x != 1.0 / n);\
+  else\
+    printf ("x != -x; this is wrong!\n");\
+\
+  p = +y;\
+  if (x == p)\
+    printf ("Test 1.0 / x != 1.0 / +y returns %d (should be 1).\n",\
+            1.0 / x != 1.0 / p);\
+  else\
+    printf ("x != +y; this is wrong!\n");\
+  p = -y;\
+  if (x == p)\
+    printf ("Test 1.0 / x != 1.0 / -y returns %d (should be 0).\n",\
+            1.0 / x != 1.0 / p);\
+  else\
+    printf ("x != -y; this is wrong!\n");\
+}\
 void prefix ## test(void)\
 {\
-    printf("testing '%s'\n", #type);\
+    printf("testing '%s'\n", #typename);\
     prefix ## cmp(1, 2.5);\
     prefix ## cmp(2, 1.5);\
     prefix ## cmp(1, 1);\
     prefix ## fcast(234.6);\
     prefix ## fcast(-2334.6);\
     prefix ## call();\
+    prefix ## signed_zeros();\
 }
 
-FTEST(f, float, "%f")
-FTEST(d, double, "%f")
-FTEST(ld, long double, "%Lf")
+FTEST(f, float, float, "%f")
+FTEST(d, double, double, "%f")
+FTEST(ld, long double, LONG_DOUBLE, "%Lf")
 
 double ftab1[3] = { 1.2, 3.4, -5.6 };
 
 
 void float_test(void)
 {
+#if !defined(__arm__) || defined(__ARM_PCS_VFP)
     float fa, fb;
     double da, db;
     int a;
@@ -1637,7 +1780,7 @@ void float_test(void)
     printf("float_test:\n");
     printf("sizeof(float) = %d\n", sizeof(float));
     printf("sizeof(double) = %d\n", sizeof(double));
-    printf("sizeof(long double) = %d\n", sizeof(long double));
+    printf("sizeof(long double) = %d\n", sizeof(LONG_DOUBLE));
     ftest();
     dtest();
     ldtest();
@@ -1654,6 +1797,7 @@ void float_test(void)
     b = 4000000000;
     db = b;
     printf("db = %f\n", db);
+#endif
 }
 
 int fib(int n)
@@ -1696,19 +1840,19 @@ void lloptest(long long a, long long b)
     ua = a;
     ub = b;
     /* arith */
-    printf("arith: %Ld %Ld %Ld\n",
+    printf("arith: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            a + b,
            a - b,
            a * b);
     
     if (b != 0) {
-        printf("arith1: %Ld %Ld\n",
+        printf("arith1: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            a / b,
            a % b);
     }
 
     /* binary */
-    printf("bin: %Ld %Ld %Ld\n",
+    printf("bin: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            a & b,
            a | b,
            a ^ b);
@@ -1733,25 +1877,25 @@ void lloptest(long long a, long long b)
     /* arith2 */
     a++;
     b++;
-    printf("arith2: %Ld %Ld\n", a, b);
-    printf("arith2: %Ld %Ld\n", a++, b++);
-    printf("arith2: %Ld %Ld\n", --a, --b);
-    printf("arith2: %Ld %Ld\n", a, b);
+    printf("arith2: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", a, b);
+    printf("arith2: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", a++, b++);
+    printf("arith2: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", --a, --b);
+    printf("arith2: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", a, b);
     b = ub = 0;
     printf("not: %d %d %d %d\n", !a, !ua, !b, !ub);
 }
 
 void llshift(long long a, int b)
 {
-    printf("shift: %Ld %Ld %Ld\n",
+    printf("shift: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            (unsigned long long)a >> b,
            a >> b,
            a << b);
-    printf("shiftc: %Ld %Ld %Ld\n",
+    printf("shiftc: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            (unsigned long long)a >> 3,
            a >> 3,
            a << 3);
-    printf("shiftc: %Ld %Ld %Ld\n",
+    printf("shiftc: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n",
            (unsigned long long)a >> 35,
            a >> 35,
            a << 35);
@@ -1761,14 +1905,14 @@ void llfloat(void)
 {
     float fa;
     double da;
-    long double lda;
+    LONG_DOUBLE lda;
     long long la, lb, lc;
     unsigned long long ula, ulb, ulc;
     la = 0x12345678;
     ula = 0x72345678;
     la = (la << 20) | 0x12345;
     ula = ula << 33;
-    printf("la=%Ld ula=%Lu\n", la, ula);
+    printf("la=" LONG_LONG_FORMAT " ula=" ULONG_LONG_FORMAT "\n", la, ula);
 
     fa = la;
     da = la;
@@ -1778,7 +1922,7 @@ void llfloat(void)
     la = fa;
     lb = da;
     lc = lda;
-    printf("ftoll: %Ld %Ld %Ld\n", la, lb, lc);
+    printf("ftoll: " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", la, lb, lc);
 
     fa = ula;
     da = ula;
@@ -1788,7 +1932,7 @@ void llfloat(void)
     ula = fa;
     ulb = da;
     ulc = lda;
-    printf("ftoull: %Lu %Lu %Lu\n", ula, ulb, ulc);
+    printf("ftoull: " ULONG_LONG_FORMAT " " ULONG_LONG_FORMAT " " ULONG_LONG_FORMAT "\n", ula, ulb, ulc);
 }
 
 long long llfunc1(int a)
@@ -1817,14 +1961,14 @@ void longlong_test(void)
     ua = -2;
     a = ia;
     b = ua;
-    printf("%Ld %Ld\n", a, b);
-    printf("%Ld %Ld %Ld %Lx\n", 
+    printf(LONG_LONG_FORMAT " " LONG_LONG_FORMAT "\n", a, b);
+    printf(LONG_LONG_FORMAT " " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " %Lx\n", 
            (long long)1, 
            (long long)-2,
            1LL,
            0x1234567812345679);
     a = llfunc1(-3);
-    printf("%Ld\n", a);
+    printf(LONG_LONG_FORMAT "\n", a);
 
     lloptest(1000, 23);
     lloptest(0xff, 0x1234);
@@ -1865,45 +2009,42 @@ void longlong_test(void)
     b = 4294967295LL;
     printf("%d %d %d %d\n", a > b, a < b, a >= b, a <= b);
 
-    printf("%Ld\n", 0x123456789LLU);
+    printf(LONG_LONG_FORMAT "\n", 0x123456789LLU);
 }
 
 void manyarg_test(void)
 {
-    long double ld = 1234567891234LL;
+    LONG_DOUBLE ld = 1234567891234LL;
     printf("manyarg_test:\n");
     printf("%d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f %f %f\n",
            1, 2, 3, 4, 5, 6, 7, 8,
            0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8, 8.9, 9.0);
     printf("%d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f %f %f "
-           "%Ld %Ld %f %f\n",
+           LONG_LONG_FORMAT " " LONG_LONG_FORMAT " %f %f\n",
            1, 2, 3, 4, 5, 6, 7, 8,
            0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8, 8.9, 9.0,
            1234567891234LL, 987654321986LL,
            42.0, 43.0);
     printf("%Lf %d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f %f %f "
-           "%Ld %Ld %f %f\n",
+           LONG_LONG_FORMAT " " LONG_LONG_FORMAT " %f %f\n",
            ld, 1, 2, 3, 4, 5, 6, 7, 8,
            0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8, 8.9, 9.0,
            1234567891234LL, 987654321986LL,
            42.0, 43.0);
-    /* XXX: known bug of x86-64 */
-#ifndef __x86_64__
     printf("%d %d %d %d %d %d %d %d %Lf\n",
            1, 2, 3, 4, 5, 6, 7, 8, ld);
     printf("%d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f %f %f "
-           "%Ld %Ld %f %f %Lf\n",
+           LONG_LONG_FORMAT " " LONG_LONG_FORMAT "%f %f %Lf\n",
            1, 2, 3, 4, 5, 6, 7, 8,
            0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8, 8.9, 9.0,
            1234567891234LL, 987654321986LL,
            42.0, 43.0, ld);
     printf("%d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f %f %f "
-           "%Lf %Ld %Ld %f %f %Lf\n",
+           "%Lf " LONG_LONG_FORMAT " " LONG_LONG_FORMAT " %f %f %Lf\n",
            1, 2, 3, 4, 5, 6, 7, 8,
            0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8, 8.9, 9.0,
            ld, 1234567891234LL, 987654321986LL,
            42.0, 43.0, ld);
-#endif
 }
 
 void vprintf1(const char *fmt, ...)
@@ -1913,7 +2054,7 @@ void vprintf1(const char *fmt, ...)
     int c, i;
     double d;
     long long ll;
-    long double ld;
+    LONG_DOUBLE ld;
 
     va_start(aq, fmt);
     va_copy(ap, aq);
@@ -1939,10 +2080,10 @@ void vprintf1(const char *fmt, ...)
                 break;
             case 'l':
                 ll = va_arg(ap, long long);
-                printf("%Ld", ll);
+                printf(LONG_LONG_FORMAT, ll);
                 break;
             case 'F':
-                ld = va_arg(ap, long double);
+                ld = va_arg(ap, LONG_DOUBLE);
                 printf("%Lf", ld);
                 break;
             }
@@ -1975,20 +2116,25 @@ void stdarg_for_struct(struct myspace bob, ...)
     va_end(ap);
 }
 
+void stdarg_for_libc(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
+}
+
 void stdarg_test(void)
 {
-    long double ld = 1234567891234LL;
+    LONG_DOUBLE ld = 1234567891234LL;
     struct myspace bob;
 
     vprintf1("%d %d %d\n", 1, 2, 3);
     vprintf1("%f %d %f\n", 1.0, 2, 3.0);
     vprintf1("%l %l %d %f\n", 1234567891234LL, 987654321986LL, 3, 1234.0);
-    vprintf1("%F %F %F\n", 1.2L, 2.3L, 3.4L);
-#ifdef __x86_64__
-    /* a bug of x86's TCC */
+    vprintf1("%F %F %F\n", LONG_DOUBLE_LITERAL(1.2), LONG_DOUBLE_LITERAL(2.3), LONG_DOUBLE_LITERAL(3.4));
     vprintf1("%d %f %l %F %d %f %l %F\n",
-             1, 1.2, 3L, 4.5L, 6, 7.8, 9L, 0.1L);
-#endif
+             1, 1.2, 3LL, LONG_DOUBLE_LITERAL(4.5), 6, 7.8, 9LL, LONG_DOUBLE_LITERAL(0.1));
     vprintf1("%d %d %d %d %d %d %d %d %f %f %f %f %f %f %f %f\n",
              1, 2, 3, 4, 5, 6, 7, 8,
              0.1, 1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8);
@@ -2024,6 +2170,7 @@ void stdarg_test(void)
 
     bob.profile = 42;
     stdarg_for_struct(bob, bob, bob, bob.profile);
+    stdarg_for_libc("stdarg_for_libc: %s %.2f %d\n", "string", 1.23, 456);
 }
 
 void whitespace_test(void)
@@ -2096,7 +2243,7 @@ void old_style_function(void)
 
 void alloca_test()
 {
-#if defined __i386__ || defined __x86_64__
+#if defined __i386__ || defined __x86_64__ || defined __arm__
     char *p = alloca(16);
     strcpy(p,"123456789012345");
     printf("alloca: p is %s\n", p);
@@ -2129,7 +2276,7 @@ void c99_vla_test(int size1, int size2)
     printf("%s\n", (sizeof tab1 == size1 * size2 * 2 * sizeof(int)) ? "PASSED" : "FAILED");
     tab1_ptr = tab1;
     tab2_ptr = tab2;
-    printf("Test C99 VLA 2 (ptrs substract): ");
+    printf("Test C99 VLA 2 (ptrs subtract): ");
     printf("%s\n", (tab2 - tab1 == (tab2_ptr - tab1_ptr) / (sizeof(int) * 2)) ? "PASSED" : "FAILED");
     printf("Test C99 VLA 3 (ptr add): ");
     printf("%s\n", &tab1[5][1] == (tab1_ptr + (5 * 2 + 1) * sizeof(int)) ? "PASSED" : "FAILED");
@@ -2165,7 +2312,9 @@ void c99_vla_test(int size1, int size2)
 #endif
 }
 
+#ifndef __TINYC__
 typedef __SIZE_TYPE__ uintptr_t;
+#endif
 
 void sizeof_test(void)
 {
@@ -2271,24 +2420,24 @@ void local_label_test(void)
 }
 
 /* inline assembler test */
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__)
 
 /* from linux kernel */
 static char * strncat1(char * dest,const char * src,size_t count)
 {
-int d0, d1, d2, d3;
+long d0, d1, d2, d3;
 __asm__ __volatile__(
 	"repne\n\t"
 	"scasb\n\t"
-	"decl %1\n\t"
-	"movl %8,%3\n"
-	"1:\tdecl %3\n\t"
+	"dec %1\n\t"
+	"mov %8,%3\n"
+	"1:\tdec %3\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
 	"jne 1b\n"
-	"2:\txorl %2,%2\n\t"
+	"2:\txor %2,%2\n\t"
 	"stosb"
 	: "=&S" (d0), "=&D" (d1), "=&a" (d2), "=&c" (d3)
 	: "0" (src),"1" (dest),"2" (0),"3" (0xffffffff), "g" (count)
@@ -2298,18 +2447,18 @@ return dest;
 
 static char * strncat2(char * dest,const char * src,size_t count)
 {
-int d0, d1, d2, d3;
+long d0, d1, d2, d3;
 __asm__ __volatile__(
 	"repne scasb\n\t" /* one-line repne prefix + string op */
-	"decl %1\n\t"
-	"movl %8,%3\n"
-	"1:\tdecl %3\n\t"
+	"dec %1\n\t"
+	"mov %8,%3\n"
+	"1:\tdec %3\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
 	"jne 1b\n"
-	"2:\txorl %2,%2\n\t"
+	"2:\txor %2,%2\n\t"
 	"stosb"
 	: "=&S" (d0), "=&D" (d1), "=&a" (d2), "=&c" (d3)
 	: "0" (src),"1" (dest),"2" (0),"3" (0xffffffff), "g" (count)
@@ -2319,7 +2468,7 @@ return dest;
 
 static inline void * memcpy1(void * to, const void * from, size_t n)
 {
-int d0, d1, d2;
+long d0, d1, d2;
 __asm__ __volatile__(
 	"rep ; movsl\n\t"
 	"testb $2,%b4\n\t"
@@ -2337,7 +2486,7 @@ return (to);
 
 static inline void * memcpy2(void * to, const void * from, size_t n)
 {
-int d0, d1, d2;
+long d0, d1, d2;
 __asm__ __volatile__(
 	"rep movsl\n\t"  /* one-line rep prefix + string op */
 	"testb $2,%b4\n\t"
@@ -2376,14 +2525,28 @@ static __inline__ __const__ unsigned int swab32(unsigned int x)
 static __inline__ unsigned long long mul64(unsigned int a, unsigned int b)
 {
     unsigned long long res;
+#ifdef __x86_64__
+    /* Using the A constraint is wrong (it means rdx:rax, which is too large)
+       but still test the 32bit->64bit mull.  */
+    unsigned int resh, resl;
+    __asm__("mull %2" : "=a" (resl), "=d" (resh) : "a" (a), "r" (b));
+    res = ((unsigned long long)resh << 32) | resl;
+#else
     __asm__("mull %2" : "=A" (res) : "a" (a), "r" (b));
+#endif
     return res;
 }
 
 static __inline__ unsigned long long inc64(unsigned long long a)
 {
     unsigned long long res;
+#ifdef __x86_64__
+    /* Using the A constraint is wrong, and increments are tested
+       elsewere.  */
+    res = a + 1;
+#else
     __asm__("addl $1, %%eax ; adcl $0, %%edx" : "=A" (res) : "A" (a));
+#endif
     return res;
 }
 
@@ -2457,6 +2620,8 @@ void builtin_test(void)
     COMPAT_TYPE(int *, void *);
     COMPAT_TYPE(int *, const int *);
     COMPAT_TYPE(char *, unsigned char *);
+    COMPAT_TYPE(char *, signed char *);
+    COMPAT_TYPE(char *, char *);
 /* space is needed because tcc preprocessor introduces a space between each token */
     COMPAT_TYPE(char * *, void *); 
 #endif
@@ -2669,7 +2834,7 @@ double get100 () { return 100.0; }
 
 void callsave_test(void)
 {
-#if defined __i386__ || defined __x86_64__
+#if defined __i386__ || defined __x86_64__ || defined __arm__
   int i, s; double *d; double t;
   s = sizeof (double);
   printf ("callsavetest: %d\n", s);
@@ -2698,16 +2863,24 @@ void bfa2(ptrdiff_t str_offset)
 void bfa1(ptrdiff_t str_offset)
 {
     printf("bfa1: %s\n", (char *)__builtin_frame_address(1) + str_offset);
-#if defined(__arm__) && !defined(__GNUC__)
     bfa2(str_offset);
-#endif
 }
 
 void builtin_frame_address_test(void)
 {
+/* builtin_frame_address fails on ARM with gcc which make test3 fail */
+#ifndef __arm__
     char str[] = "__builtin_frame_address";
     char *fp0 = __builtin_frame_address(0);
 
     printf("str: %s\n", str);
     bfa1(str-fp0);
+#endif
+}
+
+char via_volatile (char i)
+{
+  char volatile vi;
+  vi = i;
+  return vi;
 }

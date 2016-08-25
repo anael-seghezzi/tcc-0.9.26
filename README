@@ -28,7 +28,9 @@ Features:
 Documentation:
 -------------
 
-1) Installation on a i386 Linux host (for Windows read tcc-win32.txt)
+1) Installation on a i386/x86_64/arm Linux/OSX/FreeBSD host (for Windows read tcc-win32.txt)
+
+Note: For OSX and FreeBSD, gmake should be used instead of make.
 
    ./configure
    make
@@ -45,6 +47,7 @@ directories to hold build objects, kept separate from your source tree:
    make test
    make install
 
+Texi2html must be installed to compile the doc. 
 By default, tcc is installed in /usr/local/bin.
 ./configure --help  shows configuration options.
 

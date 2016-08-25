@@ -1,10 +1,14 @@
 TOP = ../..
 include $(TOP)/Makefile
-VPATH = $(top_srcdir)/tests/tests2
 
-TCCFLAGS = -B$(TOP)
+# clear CFLAGS and LDFLAGS
+CFLAGS :=
+LDFLAGS :=
+
 ifdef CONFIG_WIN32
  TCCFLAGS = -B$(top_srcdir)/win32 -I$(top_srcdir)/include -L$(TOP)
+else
+ TCCFLAGS = -B$(TOP) -I$(top_srcdir)/include -lm
 endif
 
 ifeq ($(TARGETOS),Darwin)
@@ -13,86 +17,63 @@ ifeq ($(TARGETOS),Darwin)
  export MACOSX_DEPLOYMENT_TARGET:=10.2
 endif
 
-TCC_RUN = $(TOP)/tcc $(TCCFLAGS) -run
+TCC = $(TOP)/tcc $(TCCFLAGS)
 
-TESTS =	\
- 00_assignment.test \
- 01_comment.test \
- 02_printf.test \
- 03_struct.test \
- 04_for.test \
- 05_array.test \
- 06_case.test \
- 07_function.test \
- 08_while.test \
- 09_do_while.test \
- 10_pointer.test \
- 11_precedence.test \
- 12_hashdefine.test \
- 13_integer_literals.test \
- 14_if.test \
- 15_recursion.test \
- 16_nesting.test \
- 17_enum.test \
- 18_include.test \
- 19_pointer_arithmetic.test \
- 20_pointer_comparison.test \
- 21_char_array.test \
- 22_floating_point.test \
- 23_type_coercion.test \
- 24_math_library.test \
- 25_quicksort.test \
- 26_character_constants.test \
- 27_sizeof.test \
- 28_strings.test \
- 29_array_address.test \
- 31_args.test \
- 32_led.test \
- 33_ternary_op.test \
- 35_sizeof.test \
- 36_array_initialisers.test \
- 37_sprintf.test \
- 38_multiple_array_index.test \
- 39_typedef.test \
- 40_stdio.test \
- 41_hashif.test \
- 42_function_pointer.test \
- 43_void_param.test \
- 44_scoped_declarations.test \
- 45_empty_for.test \
- 47_switch_return.test \
- 48_nested_break.test \
- 49_bracket_evaluation.test \
- 50_logical_second_arg.test \
- 51_static.test \
- 52_unnamed_enum.test \
- 54_goto.test \
- 55_lshift_type.test
+TESTS = $(patsubst %.c,%.test,$(sort $(wildcard *.c)))
 
-# 30_hanoi.test -- seg fault in the code, gcc as well
 # 34_array_assignment.test -- array assignment is not in C standard
-# 46_grep.test -- does not compile even with gcc
+SKIP = 34_array_assignment.test
 
 # some tests do not pass on all platforms, remove them for now
+ifeq ($(CONFIG_arm_eabi),yes) # not ARM soft-float
+ SKIP += 22_floating_point.test
+endif
 ifeq ($(TARGETOS),Darwin)
-  TESTS := $(filter-out 40_stdio.test,$(TESTS))
+ SKIP += 40_stdio.test
 endif
 ifdef CONFIG_WIN32
-  TESTS := $(filter-out 24_math_library.test 28_strings.test,$(TESTS))
+ SKIP += 24_math_library.test # don't have round()
+ SKIP += 28_strings.test # don't have r/index() / strings.h
 endif
+ifeq ($(ARCH),x86-64)
+ SKIP += 73_arm64.test
+endif
+ifeq (,$(filter i386 x86-64,$(ARCH)))
+ SKIP += 85-asm-outside-function.test
+endif
+
+# Some tests might need arguments
+ARGS =
+31_args.test : ARGS = arg1 arg2 arg3 arg4 arg5
+46_grep.test : ARGS = '[^* ]*[:a:d: ]+\:\*-/: $$' 46_grep.c
+
+# Some tests might need different flags
+FLAGS =
+76_dollars_in_identifiers.test : FLAGS = -fdollars-in-identifiers
+
+# Filter some always-warning
+FILTER =
+ifeq (-$(findstring arm,$(ARCH))-,-arm-)
+FILTER = 2>&1 | grep -v 'warning: soft float ABI currently not supported'
+endif
+
+all test: $(filter-out $(SKIP),$(TESTS))
 
 %.test: %.c %.expect
 	@echo Test: $*...
-	@if [ "x`echo $* | grep args`" != "x" ]; \
-	then $(TCC_RUN) $< - arg1 arg2 arg3 arg4 >$*.output; \
-	else $(TCC_RUN) $< >$*.output; \
-	fi
-	@if diff -bu $(<:.c=.expect) $*.output ; \
-	then rm -f $*.output; \
-	else exit 1; \
-	fi
+# test -run
+	@$(TCC) $(FLAGS) -run $< $(ARGS) $(FILTER) >$*.output 2>&1 || true
+	@diff -Nbu $*.expect $*.output && rm -f $*.output
+# test exe (disabled for speed)
+#	 @($(TCC) $(FLAGS) $< -o $*.exe && ./$*.exe $(ARGS)) $(FiLTER) >$*.output2 2>&1 ; \
+#	     diff -Nbu $*.expect $*.output2 && rm -f $*.output2 $*.exe
 
-all test: $(TESTS)
+# automatically generate .expect files with gcc:
+%.expect :
+	(gcc $*.c -o a.exe && ./a.exe $(ARGS)) >$*.expect 2>&1; rm -f a.exe
+
+# tell make not to delete
+.PRECIOUS: %.expect
 
 clean:
-	rm -vf fred.txt *.output
+	rm -vf fred.txt *.output a.exe
