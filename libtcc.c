@@ -1001,7 +1001,8 @@ static int tcc_compile(TCCState *s1)
        they are undefined) */
     free_defines(define_start);
 
-    gen_inline_functions();
+	if (s1->nb_errors == 0)
+		gen_inline_functions();
 
     sym_pop(&global_stack, NULL);
     sym_pop(&local_stack, NULL);
